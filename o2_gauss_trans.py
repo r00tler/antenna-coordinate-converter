@@ -4,13 +4,14 @@
 - displays converted coordinates in bing maps
 """
 
+import GKConverter.gkconverter
+import subprocess
+import sqlite3
 import os
 import time
-import sqlite3
-import subprocess
-import GKConverter.gkconverter as gk
+import tempfile
 
-TMP_DIR = '/tmp'
+TMP_FILE = tempfile.NamedTemporaryFile()
 DB_LOCATION = '/data/data/com.android.cellbroadcastreceiver/databases/'
 DB_NAME = 'cell_broadcasts.db'
 
@@ -20,7 +21,7 @@ def convert(broadcast):
     """
     right = int(broadcast[:6]+'0')
     high = int(broadcast[6:]+'0')
-    longitude, latitude = gk.convert_GK_to_lat_long(right, high)
+    longitude, latitude = GKConverter.gkconverter.convert_GK_to_lat_long(right, high)
 
     return longitude, latitude
 
@@ -30,7 +31,7 @@ def get_db():
     """
     subprocess.call(['adb', 'kill-server'])
     subprocess.call(['adb', 'root'])
-    subprocess.call(['adb', 'pull', os.path.join(DB_LOCATION, DB_NAME), TMP_DIR])
+    subprocess.call(['adb', 'pull', os.path.join(DB_LOCATION, DB_NAME), TMP_FILE.name])
 
 def get_broadcasts():
     """
@@ -38,11 +39,15 @@ def get_broadcasts():
     """
     get_db()
 
-    conn = sqlite3.connect(os.path.join(TMP_DIR, DB_NAME))
-    cursor = conn.cursor()
-    broadcasts = []
-    for row in cursor.execute('SELECT body,date FROM broadcasts'):
-        broadcasts.append((row[0], int(str(row[1])[:10])))
+    try:
+        conn = sqlite3.connect(os.path.join(TMP_FILE.name))
+        cursor = conn.cursor()
+        broadcasts = []
+        for row in cursor.execute('SELECT body,date FROM broadcasts'):
+            broadcasts.append((row[0], int(str(row[1])[:10])))
+    except sqlite3.OperationalError:
+        print('Failed to get values from the database')
+        exit()
 
     return broadcasts
 
@@ -65,4 +70,7 @@ def main():
         time.sleep(0.5)
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        exit()
